@@ -1,0 +1,42 @@
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/serialization.hpp>
+#include <rclcpp/serialized_message.hpp>
+
+class GenericSubscriber : public rclcpp::Node {
+public:
+    GenericSubscriber() : Node("generic_subscriber") {
+        this->declare_parameter<std::string>("topic_name", "/test_topic");
+
+        std::string topic_name = this->get_parameter("topic_name").as_string();
+        auto topics_info = this->get_topic_names_and_types();
+
+        for (const auto &topic : topics_info) {
+            if (topic.first == topic_name) {
+                for (const auto &type : topic.second) {
+                    subscribe_to_topic(topic_name, type);
+                }
+                return;
+            }
+        }
+
+        RCLCPP_WARN(this->get_logger(), "No publishers found for topic: %s", topic_name.c_str());
+    }
+
+private:
+    void subscribe_to_topic(const std::string &topic, const std::string &type) {
+        auto callback = [topic, type](const std::shared_ptr<rclcpp::SerializedMessage> msg) {
+            RCLCPP_INFO(rclcpp::get_logger("GenericSubscriber"), 
+                        "Received message from [%s] of type [%s]", topic.c_str(), type.c_str());
+        };
+
+        auto subscription = this->create_generic_subscription(topic, type, 10, callback);
+        RCLCPP_INFO(this->get_logger(), "Subscribed to [%s] with type [%s]", topic.c_str(), type.c_str());
+    }
+};
+
+int main(int argc, char **argv) {
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<GenericSubscriber>());
+    rclcpp::shutdown();
+    return 0;
+}
