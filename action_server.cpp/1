@@ -1,0 +1,52 @@
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include "action_topic_control/action/task.hpp"
+
+using Task = action_topic_control::action::Task;
+using GoalHandleTask = rclcpp_action::ServerGoalHandle<Task>;
+
+class TaskActionServer : public rclcpp::Node {
+public:
+    TaskActionServer() : Node("task_action_server") {
+        action_server_ = rclcpp_action::create_server<Task>(
+            this, "execute_task",
+            std::bind(&TaskActionServer::handle_goal, this, std::placeholders::_1, std::placeholders::_2),
+            std::bind(&TaskActionServer::handle_cancel, this, std::placeholders::_1),
+            std::bind(&TaskActionServer::handle_accepted, this, std::placeholders::_1)
+        );
+    }
+
+private:
+    rclcpp_action::Server<Task>::SharedPtr action_server_;
+
+    rclcpp_action::GoalResponse handle_goal(const rclcpp_action::GoalUUID &, std::shared_ptr<const Task::Goal>) {
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    }
+
+    rclcpp_action::CancelResponse handle_cancel(const std::shared_ptr<GoalHandleTask> goal_handle) {
+        return rclcpp_action::CancelResponse::ACCEPT;
+    }
+
+    void handle_accepted(const std::shared_ptr<GoalHandleTask> goal_handle) {
+        std::thread([this, goal_handle]() {
+            for (int i = 0; i < 5; i++) {
+                if (goal_handle->is_canceling()) {
+                    goal_handle->canceled(std::make_shared<Task::Result>());
+                    return;
+                }
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            }
+            auto result = std::make_shared<Task::Result>();
+            result->success = true;
+            result->result_message = "Completed";
+            goal_handle->succeed(result);
+        }).detach();
+    }
+};
+
+int main(int argc, char **argv) {
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<TaskActionServer>());
+    rclcpp::shutdown();
+    return 0;
+}
